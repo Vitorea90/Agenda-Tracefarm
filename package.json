@@ -1,0 +1,9 @@
+{
+  "name": "agenda-tracefarm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agenda Semanal Compartilhada",
+  "scripts": {
+    "build": "echo 'Static build successful'"
+  }
+}
