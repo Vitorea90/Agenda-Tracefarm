@@ -195,31 +195,66 @@
         </div>
     </div>
 
-    <!-- MODAL DE CONFIGURAÇÃO DE BANCO DE DADOS (VERCEL POSTGRES) -->
+    <!-- MODAL DE CONFIGURAÇÃO DE BANCO DE DADOS (SUPABASE) -->
     <div class="modal-overlay" id="db-config-modal">
         <div class="modal-card">
             <div class="modal-header">
-                <h2><i class="fa-solid fa-database"></i> Configurar Vercel Postgres</h2>
+                <h2><i class="fa-solid fa-database"></i> Configurar Supabase</h2>
                 <button class="modal-close-btn" id="db-modal-close"><i class="fa-solid fa-times"></i></button>
             </div>
             <div class="modal-body">
-                <p>Esta aplicação suporta sincronização automática em tempo real salvando os dados no banco <strong>Vercel Postgres</strong> (através da API HTTP Neon).</p>
-                
+                <p>Conecte ao <strong>Supabase</strong> para sincronizar em tempo real entre todos os participantes.</p>
+
                 <div class="alert-info-box">
                     <i class="fa-solid fa-shield-halved"></i>
-                    <p>Sua string de conexão é salva <strong>apenas localmente</strong> no seu navegador (LocalStorage) e usada para fazer requisições diretas de SQL para a Neon. Ela nunca passa por servidores intermediários.</p>
+                    <p>Suas credenciais são salvas <strong>apenas localmente</strong> no navegador (LocalStorage) e usadas para acessar a API REST do Supabase diretamente. Nunca passam por servidores intermediários.</p>
                 </div>
-                
+
+                <div class="alert-info-box" style="background: rgba(99,102,241,0.08); border-color: var(--accent);">
+                    <i class="fa-solid fa-circle-info" style="color: var(--accent);"></i>
+                    <div>
+                        <p style="margin: 0 0 6px 0;"><strong>Antes de conectar, crie as tabelas no Supabase SQL Editor:</strong></p>
+                        <pre style="font-size: 11px; background: var(--bg-tertiary); border-radius: 6px; padding: 8px; overflow-x: auto; margin: 0; color: var(--text-secondary);">CREATE TABLE IF NOT EXISTS agenda_perfis (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  cor TEXT NOT NULL,
+  avatar TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agenda_disponibilidade (
+  perfil_id TEXT NOT NULL,
+  semana_ref TEXT NOT NULL,
+  dia_semana INT NOT NULL,
+  slot_hora INT NOT NULL,
+  PRIMARY KEY (perfil_id, semana_ref, dia_semana, slot_hora)
+);
+
+-- Habilitar Row Level Security (leitura pública)
+ALTER TABLE agenda_perfis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agenda_disponibilidade ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON agenda_perfis FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "allow_all" ON agenda_disponibilidade FOR ALL USING (true) WITH CHECK (true);</pre>
+                    </div>
+                </div>
+
                 <form id="db-config-form">
                     <div class="form-group">
-                        <label for="db-connection-string">String de Conexão (Connection String):</label>
-                        <input type="password" id="db-connection-string" placeholder="postgres://default:xxx@xxx-pooler.us-east-1.postgres.vercel-storage.com/neondb" autocomplete="off">
-                        <button type="button" id="toggle-conn-visibility" class="btn-inline-icon" title="Mostrar/Ocultar"><i class="fa-solid fa-eye"></i></button>
-                        <small class="form-help">Copie a String de Conexão da aba "Storage" ou "Settings" do seu projeto Vercel Postgres.</small>
+                        <label for="db-supabase-url">URL do Projeto Supabase:</label>
+                        <input type="text" id="db-supabase-url" placeholder="https://xxxxxxxxxxx.supabase.co" autocomplete="off">
+                        <small class="form-help">Encontre em: Supabase Dashboard → Settings → API → Project URL</small>
                     </div>
-                    
+
+                    <div class="form-group" style="position: relative;">
+                        <label for="db-supabase-key">Anon Key (chave pública):</label>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <input type="password" id="db-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off" style="flex: 1;">
+                            <button type="button" id="toggle-key-visibility" class="btn-inline-icon" title="Mostrar/Ocultar chave"><i class="fa-solid fa-eye"></i></button>
+                        </div>
+                        <small class="form-help">Encontre em: Supabase Dashboard → Settings → API → anon / public</small>
+                    </div>
+
                     <div class="form-actions">
-                        <button type="button" id="db-disconnect-btn" class="btn-danger">Limpar Conexão</button>
+                        <button type="button" id="db-disconnect-btn" class="btn-danger">Desconectar</button>
                         <div class="right-actions">
                             <button type="button" id="db-test-btn" class="btn-secondary">Testar Conexão</button>
                             <button type="submit" class="btn-primary">Salvar e Conectar</button>

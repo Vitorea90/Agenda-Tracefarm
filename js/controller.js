@@ -101,33 +101,39 @@ export class Controller {
             localStorage.setItem('agenda_theme', newTheme);
         });
 
-        // 3. Configurações de Banco de Dados
-        this.view.configDbBtn.addEventListener('click', () => this.view.openDbModal(this.model.connectionString));
-        this.view.dbStatusBadge.addEventListener('click', () => this.view.openDbModal(this.model.connectionString));
+        // 3. Configurações de Banco de Dados (Supabase)
+        this.view.configDbBtn.addEventListener('click', () =>
+            this.view.openDbModal(this.model.supabaseUrl, this.model.supabaseKey)
+        );
+        this.view.dbStatusBadge.addEventListener('click', () =>
+            this.view.openDbModal(this.model.supabaseUrl, this.model.supabaseKey)
+        );
         this.view.dbModalClose.addEventListener('click', () => this.view.closeModal('db-config-modal'));
-        
+
         // Testar Conexão
         this.view.dbTestBtn.addEventListener('click', async () => {
-            const connStr = this.view.dbConnectionString.value.trim();
+            const url = this.view.dbSupabaseUrl.value.trim();
+            const key = this.view.dbSupabaseKey.value.trim();
             this.view.dbTestBtn.disabled = true;
             this.view.dbTestBtn.textContent = 'Testando...';
-            
-            const result = await this.model.testConnection(connStr);
-            
+
+            const result = await this.model.testConnection(url, key);
+
             this.view.dbTestBtn.disabled = false;
             this.view.dbTestBtn.innerHTML = 'Testar Conexão';
             this.view.showDbTestResult(result.success, result.error || '');
         });
 
-        // Salvar Conexão
+        // Salvar Credenciais
         this.view.dbConfigForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const connStr = this.view.dbConnectionString.value.trim();
+            const url = this.view.dbSupabaseUrl.value.trim();
+            const key = this.view.dbSupabaseKey.value.trim();
             const submitBtn = this.view.dbConfigForm.querySelector('button[type="submit"]');
             submitBtn.disabled = true;
             submitBtn.textContent = 'Conectando...';
 
-            const result = await this.model.setConnectionString(connStr);
+            const result = await this.model.setCredentials(url, key);
 
             submitBtn.disabled = false;
             submitBtn.textContent = 'Salvar e Conectar';
@@ -141,8 +147,8 @@ export class Controller {
 
         // Desconectar / Limpar
         this.view.dbDisconnectBtn.addEventListener('click', async () => {
-            if (confirm('Deseja realmente desconectar do banco de dados remetendo ao Modo Local?')) {
-                await this.model.setConnectionString('');
+            if (confirm('Deseja realmente desconectar do Supabase e usar o Modo Local?')) {
+                await this.model.setCredentials('', '');
                 this.view.closeModal('db-config-modal');
             }
         });

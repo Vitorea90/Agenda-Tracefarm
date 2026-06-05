@@ -1,24 +1,22 @@
-// Importação do Neon Serverless Driver para Postgres sobre HTTP
-// Usamos a versão do esm.sh que resolve as dependências para o navegador
-import { neon } from 'https://esm.sh/@neondatabase/serverless@0.9.0';
+// =============================================================================
+// MODEL - Agenda Semanal Compartilhada
+// Persistência: Supabase REST API (via fetch) com fallback para LocalStorage
+// =============================================================================
 
 export class Model {
     constructor() {
         this.listeners = {};
-        this.profiles = []; // Array de { id, nome, cor, avatar }
-        this.availabilities = {}; // Objeto chaveado por perfilId_semanaRef: Set de "dia_slot" (ex: "1_16" -> Segunda às 08:00)
-        
-        // Configurações do Banco de Dados
-        this.connectionString = localStorage.getItem('agenda_db_conn') || '';
-        this.isPostgresConnected = false;
-        this.sql = null;
-        
+        this.profiles = [];
+        this.availabilities = {};
+
+        // Credenciais do Supabase (salvas no LocalStorage)
+        this.supabaseUrl = localStorage.getItem('agenda_supabase_url') || '';
+        this.supabaseKey = localStorage.getItem('agenda_supabase_key') || '';
+        this.isSupabaseConnected = false;
+
         // Estado da semana
-        // Carrega o offset da semana anterior ou inicia em 0 (semana atual)
         const savedOffset = localStorage.getItem('agenda_week_offset');
         this.weekOffset = savedOffset !== null ? parseInt(savedOffset, 10) : 0;
-        
-        // Determinar a semana de referência atual
         this.updateWeekDays();
     }
 
@@ -26,15 +24,13 @@ export class Model {
     // SISTEMA DE EVENTOS (OBSERVER PATTERN)
     // ==========================================================================
     on(event, callback) {
-        if (!this.listeners[event]) {
-            this.listeners[event] = [];
-        }
+        if (!this.listeners[event]) this.listeners[event] = [];
         this.listeners[event].push(callback);
     }
 
     notify(event, data) {
         if (this.listeners[event]) {
-            this.listeners[event].forEach(callback => callback(data));
+            this.listeners[event].forEach(cb => cb(data));
         }
     }
 
@@ -43,86 +39,57 @@ export class Model {
     // ==========================================================================
     updateWeekDays() {
         const today = new Date();
-        // Ajusta para o meio-dia para evitar problemas de fuso horário / horário de verão
         today.setHours(12, 0, 0, 0);
-        
-        // Encontra o domingo da semana atual (0 = Domingo)
+
         const currentSunday = new Date(today);
         currentSunday.setDate(today.getDate() - today.getDay());
-        
-        // Aplica o offset de semanas
+
         this.currentSunday = new Date(currentSunday);
         this.currentSunday.setDate(currentSunday.getDate() + (this.weekOffset * 7));
-        
-        // Gera os 7 dias da semana (Domingo a Sábado)
+
         this.weekDays = [];
         for (let i = 0; i < 7; i++) {
             const day = new Date(this.currentSunday);
             day.setDate(this.currentSunday.getDate() + i);
             this.weekDays.push(day);
         }
-        
-        // String de referência da semana: "AAAA-MM-DD" do domingo
+
         this.weekRef = this.formatDateISO(this.currentSunday);
-        
-        // Salva o offset
         localStorage.setItem('agenda_week_offset', this.weekOffset);
     }
 
-    getWeekDays() {
-        return this.weekDays;
-    }
+    getWeekDays() { return this.weekDays; }
+    getWeekRef()  { return this.weekRef; }
 
-    getWeekRef() {
-        return this.weekRef;
-    }
-
-    // Retorna o rótulo estilizado da semana e intervalo de datas
-    // Ex: "1ª Semana de Junho" e "(31/05 a 06/06)"
     getWeekLabels() {
-        const sunday = this.weekDays[0];
+        const sunday   = this.weekDays[0];
         const saturday = this.weekDays[6];
-        
-        // O mês de referência da semana será o mês do sábado (conforme regra da maior parte da semana / fim de semana)
         const refMonth = saturday.getMonth();
-        const refYear = saturday.getFullYear();
-        
-        // Nomes dos meses em português
+        const refYear  = saturday.getFullYear();
+
         const meses = [
-            'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+            'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+            'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
         ];
-        
-        // Calcula qual semana do mês é (1ª, 2ª, 3ª, etc) com base no sábado
-        // Conta quantos sábados do mesmo mês existem antes ou no mesmo dia que este sábado
+
         let saturdayCount = 0;
         const tempDate = new Date(saturday);
         while (tempDate.getMonth() === refMonth) {
             saturdayCount++;
             tempDate.setDate(tempDate.getDate() - 7);
         }
-        
+
         const weekName = `${saturdayCount}ª Semana de ${meses[refMonth]}`;
-        
-        // Formata intervalo (DD/MM)
-        const pad = (n) => String(n).padStart(2, '0');
-        const rangeStr = `(${pad(sunday.getDate())}/${pad(sunday.getMonth() + 1)} a ${pad(saturday.getDate())}/${pad(saturday.getMonth() + 1)})`;
-        
-        return {
-            title: weekName,
-            range: rangeStr,
-            year: refYear
-        };
+        const pad = n => String(n).padStart(2, '0');
+        const rangeStr = `(${pad(sunday.getDate())}/${pad(sunday.getMonth()+1)} a ${pad(saturday.getDate())}/${pad(saturday.getMonth()+1)})`;
+
+        return { title: weekName, range: rangeStr, year: refYear };
     }
 
     changeWeek(direction) {
-        if (direction === 'next') {
-            this.weekOffset += 1;
-        } else if (direction === 'prev') {
-            this.weekOffset -= 1;
-        } else if (direction === 'today') {
-            this.weekOffset = 0;
-        }
+        if (direction === 'next')        this.weekOffset += 1;
+        else if (direction === 'prev')   this.weekOffset -= 1;
+        else if (direction === 'today')  this.weekOffset  = 0;
         this.updateWeekDays();
         this.notify('weekChanged');
         return this.loadData();
@@ -136,129 +103,182 @@ export class Model {
     }
 
     // ==========================================================================
-    // PERSISTÊNCIA & CONEXÃO (LOCALSTORAGE / VERCEL POSTGRES)
+    // SUPABASE REST API — HELPERS
+    // ==========================================================================
+    _headers() {
+        return {
+            'Content-Type':  'application/json',
+            'apikey':         this.supabaseKey,
+            'Authorization': `Bearer ${this.supabaseKey}`,
+            'Prefer':         'return=representation'
+        };
+    }
+
+    _url(table, query = '') {
+        return `${this.supabaseUrl}/rest/v1/${table}${query ? '?' + query : ''}`;
+    }
+
+    async _get(table, query = '') {
+        const res = await fetch(this._url(table, query), {
+            method: 'GET',
+            headers: { ...this._headers(), 'Prefer': 'return=representation' }
+        });
+        if (!res.ok) throw new Error(`GET ${table} falhou: ${res.status} ${await res.text()}`);
+        return res.json();
+    }
+
+    async _post(table, body) {
+        const res = await fetch(this._url(table), {
+            method:  'POST',
+            headers: this._headers(),
+            body:    JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error(`POST ${table} falhou: ${res.status} ${await res.text()}`);
+        return res.json();
+    }
+
+    async _upsert(table, body) {
+        const res = await fetch(this._url(table), {
+            method:  'POST',
+            headers: { ...this._headers(), 'Prefer': 'resolution=ignore-duplicates,return=representation' },
+            body:    JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error(`UPSERT ${table} falhou: ${res.status} ${await res.text()}`);
+        return res.json();
+    }
+
+    async _patch(table, query, body) {
+        const res = await fetch(this._url(table, query), {
+            method:  'PATCH',
+            headers: this._headers(),
+            body:    JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error(`PATCH ${table} falhou: ${res.status} ${await res.text()}`);
+        return res.json();
+    }
+
+    async _delete(table, query) {
+        const res = await fetch(this._url(table, query), {
+            method:  'DELETE',
+            headers: this._headers()
+        });
+        if (!res.ok) throw new Error(`DELETE ${table} falhou: ${res.status} ${await res.text()}`);
+        return true;
+    }
+
+    // ==========================================================================
+    // CONEXÃO & INICIALIZAÇÃO
     // ==========================================================================
     async init() {
-        if (this.connectionString) {
+        if (this.supabaseUrl && this.supabaseKey) {
             try {
-                // Tenta inicializar a conexão Postgres
-                this.sql = neon(this.connectionString);
-                await this.createTables();
-                this.isPostgresConnected = true;
-                this.notify('dbStatusChanged', { status: 'postgres' });
+                // Teste rápido: lista perfis (mesmo que vazio é OK)
+                await this._get('agenda_perfis', 'limit=1');
+                this.isSupabaseConnected = true;
+                this.notify('dbStatusChanged', { status: 'supabase' });
             } catch (err) {
-                console.error("Falha ao conectar ao Postgres, usando LocalStorage como fallback:", err);
-                this.isPostgresConnected = false;
-                this.sql = null;
+                console.error('Falha ao conectar ao Supabase, usando LocalStorage:', err);
+                this.isSupabaseConnected = false;
                 this.notify('dbStatusChanged', { status: 'local', error: err.message });
             }
         } else {
-            this.isPostgresConnected = false;
-            this.sql = null;
+            this.isSupabaseConnected = false;
             this.notify('dbStatusChanged', { status: 'local' });
         }
 
         await this.loadData();
     }
 
-    async setConnectionString(connStr) {
-        if (connStr) {
+    async setCredentials(url, key) {
+        if (url && key) {
+            // Normaliza a URL (remove barra no final)
+            const cleanUrl = url.replace(/\/$/, '');
             try {
-                const testSql = neon(connStr);
-                // Executa uma query de teste simples
-                await testSql`SELECT 1 as connected`;
-                
-                this.connectionString = connStr;
-                localStorage.setItem('agenda_db_conn', connStr);
-                this.sql = testSql;
-                this.isPostgresConnected = true;
-                
-                await this.createTables();
-                this.notify('dbStatusChanged', { status: 'postgres' });
+                // Salva temporariamente para testar
+                const prevUrl = this.supabaseUrl;
+                const prevKey = this.supabaseKey;
+                this.supabaseUrl = cleanUrl;
+                this.supabaseKey = key;
+
+                await this._get('agenda_perfis', 'limit=1');
+
+                // Deu certo: persiste
+                localStorage.setItem('agenda_supabase_url', cleanUrl);
+                localStorage.setItem('agenda_supabase_key', key);
+                this.isSupabaseConnected = true;
+                this.notify('dbStatusChanged', { status: 'supabase' });
                 await this.loadData();
                 return { success: true };
             } catch (err) {
+                // Reverte
+                this.supabaseUrl = localStorage.getItem('agenda_supabase_url') || '';
+                this.supabaseKey = localStorage.getItem('agenda_supabase_key') || '';
                 return { success: false, error: err.message };
             }
         } else {
-            // Disconectar
-            this.connectionString = '';
-            localStorage.removeItem('agenda_db_conn');
-            this.sql = null;
-            this.isPostgresConnected = false;
+            // Desconectar
+            this.supabaseUrl = '';
+            this.supabaseKey = '';
+            localStorage.removeItem('agenda_supabase_url');
+            localStorage.removeItem('agenda_supabase_key');
+            this.isSupabaseConnected = false;
             this.notify('dbStatusChanged', { status: 'local' });
             await this.loadData();
             return { success: true };
         }
     }
 
-    async testConnection(connStr) {
+    async testConnection(url, key) {
         try {
-            const testSql = neon(connStr);
-            await testSql`SELECT 1 as connected`;
+            const cleanUrl = url.replace(/\/$/, '');
+            const res = await fetch(`${cleanUrl}/rest/v1/agenda_perfis?limit=1`, {
+                method: 'GET',
+                headers: {
+                    'apikey':        key,
+                    'Authorization': `Bearer ${key}`
+                }
+            });
+            if (!res.ok) {
+                const txt = await res.text();
+                return { success: false, error: `HTTP ${res.status}: ${txt}` };
+            }
             return { success: true };
         } catch (err) {
             return { success: false, error: err.message };
         }
     }
 
-    async createTables() {
-        if (!this.sql) return;
-        
-        // Criação da tabela de perfis
-        await this.sql`
-            CREATE TABLE IF NOT EXISTS agenda_perfis (
-                id VARCHAR(50) PRIMARY KEY,
-                nome VARCHAR(100) NOT NULL,
-                cor VARCHAR(20) NOT NULL,
-                avatar VARCHAR(10) NOT NULL
-            )
-        `;
-
-        // Criação da tabela de disponibilidades
-        await this.sql`
-            CREATE TABLE IF NOT EXISTS agenda_disponibilidade (
-                perfil_id VARCHAR(50) NOT NULL,
-                semana_ref VARCHAR(20) NOT NULL,
-                dia_semana INTEGER NOT NULL,
-                slot_hora INTEGER NOT NULL,
-                PRIMARY KEY (perfil_id, semana_ref, dia_semana, slot_hora)
-            )
-        `;
-    }
-
+    // ==========================================================================
+    // CARREGAMENTO DE DADOS
+    // ==========================================================================
     async loadData() {
-        if (this.isPostgresConnected && this.sql) {
+        if (this.isSupabaseConnected) {
             try {
-                // Carrega perfis do Postgres
-                const dbProfiles = await this.sql`SELECT id, nome, cor, avatar FROM agenda_perfis`;
-                this.profiles = dbProfiles.map(p => ({
-                    id: p.id,
-                    nome: p.nome,
-                    cor: p.cor,
+                // Perfis
+                const perfis = await this._get('agenda_perfis', 'order=nome');
+                this.profiles = perfis.map(p => ({
+                    id:     p.id,
+                    nome:   p.nome,
+                    cor:    p.cor,
                     avatar: p.avatar
                 }));
 
-                // Carrega disponibilidades da semana atual do Postgres
-                const dbAvail = await this.sql`
-                    SELECT perfil_id, dia_semana, slot_hora 
-                    FROM agenda_disponibilidade 
-                    WHERE semana_ref = ${this.weekRef}
-                `;
-                
-                // Limpa e reconstrói cache de disponibilidade para a semana atual
+                // Disponibilidades da semana atual
+                const avails = await this._get(
+                    'agenda_disponibilidade',
+                    `semana_ref=eq.${this.weekRef}&select=perfil_id,dia_semana,slot_hora`
+                );
+
                 this.availabilities = {};
-                dbAvail.forEach(av => {
+                avails.forEach(av => {
                     const key = `${av.perfil_id}_${this.weekRef}`;
-                    if (!this.availabilities[key]) {
-                        this.availabilities[key] = new Set();
-                    }
+                    if (!this.availabilities[key]) this.availabilities[key] = new Set();
                     this.availabilities[key].add(`${av.dia_semana}_${av.slot_hora}`);
                 });
 
                 this.notify('dataUpdated');
             } catch (err) {
-                console.error("Erro ao carregar dados do Postgres, usando LocalStorage fallback:", err);
+                console.error('Erro ao carregar dados do Supabase, usando LocalStorage:', err);
                 this.loadFromLocalStorage();
             }
         } else {
@@ -267,15 +287,12 @@ export class Model {
     }
 
     loadFromLocalStorage() {
-        // Perfis
         const savedProfiles = localStorage.getItem('agenda_perfis');
         this.profiles = savedProfiles ? JSON.parse(savedProfiles) : [];
 
-        // Disponibilidades
         const savedAvail = localStorage.getItem('agenda_availabilities');
         if (savedAvail) {
             const parsed = JSON.parse(savedAvail);
-            // Converte arrays de volta para Sets
             this.availabilities = {};
             for (const key in parsed) {
                 this.availabilities[key] = new Set(parsed[key]);
@@ -283,14 +300,12 @@ export class Model {
         } else {
             this.availabilities = {};
         }
-        
+
         this.notify('dataUpdated');
     }
 
     async saveToLocalStorage() {
         localStorage.setItem('agenda_perfis', JSON.stringify(this.profiles));
-        
-        // Converte Sets para Arrays para serialização JSON
         const serializeAvail = {};
         for (const key in this.availabilities) {
             serializeAvail[key] = Array.from(this.availabilities[key]);
@@ -302,23 +317,20 @@ export class Model {
     // OPERAÇÕES DE PERFIL
     // ==========================================================================
     async addProfile(name, color) {
-        const id = 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const id     = 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         const avatar = name.charAt(0).toUpperCase();
         const newProfile = { id, nome: name, cor: color, avatar };
 
         this.profiles.push(newProfile);
 
-        if (this.isPostgresConnected && this.sql) {
+        if (this.isSupabaseConnected) {
             try {
-                await this.sql`
-                    INSERT INTO agenda_perfis (id, nome, cor, avatar) 
-                    VALUES (${id}, ${name}, ${color}, ${avatar})
-                `;
+                await this._upsert('agenda_perfis', { id, nome: name, cor: color, avatar });
             } catch (err) {
-                console.error("Erro ao inserir perfil no Postgres, salvando localmente:", err);
+                console.error('Erro ao inserir perfil no Supabase:', err);
             }
         }
-        
+
         await this.saveToLocalStorage();
         this.notify('dataUpdated');
         return newProfile;
@@ -328,19 +340,19 @@ export class Model {
         const profile = this.profiles.find(p => p.id === id);
         if (!profile) return;
 
-        profile.nome = name;
-        profile.cor = color;
+        profile.nome   = name;
+        profile.cor    = color;
         profile.avatar = name.charAt(0).toUpperCase();
 
-        if (this.isPostgresConnected && this.sql) {
+        if (this.isSupabaseConnected) {
             try {
-                await this.sql`
-                    UPDATE agenda_perfis 
-                    SET nome = ${name}, cor = ${color}, avatar = ${profile.avatar} 
-                    WHERE id = ${id}
-                `;
+                await this._patch('agenda_perfis', `id=eq.${id}`, {
+                    nome:   name,
+                    cor:    color,
+                    avatar: profile.avatar
+                });
             } catch (err) {
-                console.error("Erro ao atualizar perfil no Postgres, salvando localmente:", err);
+                console.error('Erro ao atualizar perfil no Supabase:', err);
             }
         }
 
@@ -350,21 +362,16 @@ export class Model {
 
     async deleteProfile(id) {
         this.profiles = this.profiles.filter(p => p.id !== id);
-        
-        // Remove disponibilidades locais deste perfil
         for (const key in this.availabilities) {
-            if (key.startsWith(id + '_')) {
-                delete this.availabilities[key];
-            }
+            if (key.startsWith(id + '_')) delete this.availabilities[key];
         }
 
-        if (this.isPostgresConnected && this.sql) {
+        if (this.isSupabaseConnected) {
             try {
-                // Delete cascateia para disponibilidades se configurado, senão deleta manualmente
-                await this.sql`DELETE FROM agenda_disponibilidade WHERE perfil_id = ${id}`;
-                await this.sql`DELETE FROM agenda_perfis WHERE id = ${id}`;
+                await this._delete('agenda_disponibilidade', `perfil_id=eq.${id}`);
+                await this._delete('agenda_perfis', `id=eq.${id}`);
             } catch (err) {
-                console.error("Erro ao deletar perfil no Postgres, salvando localmente:", err);
+                console.error('Erro ao deletar perfil no Supabase:', err);
             }
         }
 
@@ -372,123 +379,63 @@ export class Model {
         this.notify('dataUpdated');
     }
 
-    getProfiles() {
-        return this.profiles;
-    }
+    getProfiles() { return this.profiles; }
 
     // ==========================================================================
     // OPERAÇÕES DE DISPONIBILIDADE
     // ==========================================================================
-    // Retorna se um slot está disponível para um perfil específico
     isAvailable(profileId, day, slot) {
         const key = `${profileId}_${this.weekRef}`;
         return this.availabilities[key] && this.availabilities[key].has(`${day}_${slot}`);
     }
 
-    // Retorna array de perfis disponíveis em um determinado dia/slot
     getProfilesAvailableAt(day, slot) {
         return this.profiles.filter(p => this.isAvailable(p.id, day, slot));
     }
 
-    // Altera a disponibilidade (para clique-e-arraste pintar/despintar)
-    async setAvailability(profileId, day, slot, available) {
-        const key = `${profileId}_${this.weekRef}`;
-        if (!this.availabilities[key]) {
-            this.availabilities[key] = new Set();
-        }
-
-        const slotKey = `${day}_${slot}`;
-        const isCurrentlyAvailable = this.availabilities[key].has(slotKey);
-
-        if (available && !isCurrentlyAvailable) {
-            this.availabilities[key].add(slotKey);
-            
-            if (this.isPostgresConnected && this.sql) {
-                try {
-                    await this.sql`
-                        INSERT INTO agenda_disponibilidade (perfil_id, semana_ref, dia_semana, slot_hora) 
-                        VALUES (${profileId}, ${this.weekRef}, ${day}, ${slot})
-                        ON CONFLICT (perfil_id, semana_ref, dia_semana, slot_hora) DO NOTHING
-                    `;
-                } catch (err) {
-                    console.error("Erro ao salvar disponibilidade no Postgres:", err);
-                }
-            }
-        } else if (!available && isCurrentlyAvailable) {
-            this.availabilities[key].delete(slotKey);
-            
-            if (this.isPostgresConnected && this.sql) {
-                try {
-                    await this.sql`
-                        DELETE FROM agenda_disponibilidade 
-                        WHERE perfil_id = ${profileId} 
-                          AND semana_ref = ${this.weekRef} 
-                          AND dia_semana = ${day} 
-                          AND slot_hora = ${slot}
-                    `;
-                } catch (err) {
-                    console.error("Erro ao deletar disponibilidade no Postgres:", err);
-                }
-            }
-        } else {
-            return; // Nenhuma mudança necessária
-        }
-
-        await this.saveToLocalStorage();
-    }
-
-    // Altera a disponibilidade apenas no cache local da memória
     setAvailabilityLocal(profileId, day, slot, available) {
         const key = `${profileId}_${this.weekRef}`;
-        if (!this.availabilities[key]) {
-            this.availabilities[key] = new Set();
-        }
-
+        if (!this.availabilities[key]) this.availabilities[key] = new Set();
         const slotKey = `${day}_${slot}`;
-        if (available) {
-            this.availabilities[key].add(slotKey);
-        } else {
-            this.availabilities[key].delete(slotKey);
-        }
+        if (available) this.availabilities[key].add(slotKey);
+        else           this.availabilities[key].delete(slotKey);
     }
 
-    // Sincroniza em lote as alterações de disponibilidade no banco e localstorage
     async syncAvailabilityLocalChanges(profileId, changes) {
         await this.saveToLocalStorage();
-        
-        if (this.isPostgresConnected && this.sql && changes.length > 0) {
+
+        if (this.isSupabaseConnected && changes.length > 0) {
             try {
-                const toAdd = changes.filter(c => c.available);
+                const toAdd    = changes.filter(c =>  c.available);
                 const toRemove = changes.filter(c => !c.available);
-                
                 const promises = [];
-                
-                toAdd.forEach(c => {
-                    promises.push(this.sql`
-                        INSERT INTO agenda_disponibilidade (perfil_id, semana_ref, dia_semana, slot_hora) 
-                        VALUES (${profileId}, ${this.weekRef}, ${c.day}, ${c.slot})
-                        ON CONFLICT (perfil_id, semana_ref, dia_semana, slot_hora) DO NOTHING
-                    `);
-                });
-                
-                toRemove.forEach(c => {
-                    promises.push(this.sql`
-                        DELETE FROM agenda_disponibilidade 
-                        WHERE perfil_id = ${profileId} 
-                          AND semana_ref = ${this.weekRef} 
-                          AND dia_semana = ${c.day} 
-                          AND slot_hora = ${c.slot}
-                    `);
-                });
-                
-                if (promises.length > 0) {
-                    await Promise.all(promises);
+
+                if (toAdd.length > 0) {
+                    // Upsert em lote — envia array
+                    const rows = toAdd.map(c => ({
+                        perfil_id:   profileId,
+                        semana_ref:  this.weekRef,
+                        dia_semana:  c.day,
+                        slot_hora:   c.slot
+                    }));
+                    promises.push(this._upsert('agenda_disponibilidade', rows));
                 }
+
+                toRemove.forEach(c => {
+                    promises.push(
+                        this._delete(
+                            'agenda_disponibilidade',
+                            `perfil_id=eq.${profileId}&semana_ref=eq.${this.weekRef}&dia_semana=eq.${c.day}&slot_hora=eq.${c.slot}`
+                        )
+                    );
+                });
+
+                if (promises.length > 0) await Promise.all(promises);
             } catch (err) {
-                console.error("Erro ao sincronizar alterações em lote no Postgres:", err);
+                console.error('Erro ao sincronizar disponibilidades no Supabase:', err);
             }
         }
-        
+
         this.notify('dataUpdated');
     }
 }

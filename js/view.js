@@ -48,12 +48,13 @@ export class View {
         // Modais e Popover
         this.dbConfigModal = document.getElementById('db-config-modal');
         this.dbConfigForm = document.getElementById('db-config-form');
-        this.dbConnectionString = document.getElementById('db-connection-string');
+        this.dbSupabaseUrl = document.getElementById('db-supabase-url');
+        this.dbSupabaseKey = document.getElementById('db-supabase-key');
         this.dbModalClose = document.getElementById('db-modal-close');
         this.dbDisconnectBtn = document.getElementById('db-disconnect-btn');
         this.dbTestBtn = document.getElementById('db-test-btn');
         this.dbTestResult = document.getElementById('db-test-result');
-        this.toggleConnVisibility = document.getElementById('toggle-conn-visibility');
+        this.toggleKeyVisibility = document.getElementById('toggle-key-visibility');
         
         this.profileModal = document.getElementById('profile-modal');
         this.profileForm = document.getElementById('profile-form');
@@ -83,13 +84,15 @@ export class View {
     // INICIALIZAÇÃO E EVENT LISTENERS DE VIEW
     // ==========================================================================
     setupViewEventListeners() {
-        // Alternador de Visibilidade da String de Conexão
-        this.toggleConnVisibility.addEventListener('click', () => {
-            const isPassword = this.dbConnectionString.type === 'password';
-            this.dbConnectionString.type = isPassword ? 'text' : 'password';
-            const icon = this.toggleConnVisibility.querySelector('i');
-            icon.className = isPassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
-        });
+        // Alternador de Visibilidade da API Key
+        if (this.toggleKeyVisibility) {
+            this.toggleKeyVisibility.addEventListener('click', () => {
+                const isPassword = this.dbSupabaseKey.type === 'password';
+                this.dbSupabaseKey.type = isPassword ? 'text' : 'password';
+                const icon = this.toggleKeyVisibility.querySelector('i');
+                icon.className = isPassword ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+            });
+        }
 
         // Fechar Modais no Overlay
         document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -192,17 +195,32 @@ export class View {
     }
 
     // Preenche e abre o modal de banco de dados
-    openDbModal(connString) {
-        this.dbConnectionString.value = connString;
+    openDbModal(url = '', key = '') {
+        if (this.dbSupabaseUrl) this.dbSupabaseUrl.value = url;
+        if (this.dbSupabaseKey) this.dbSupabaseKey.value = key;
         this.openModal('db-config-modal');
+    }
+
+    updateDbStatus(status, error = '') {
+        const badge = this.dbStatusBadge;
+        const text = badge.querySelector('.status-text');
+        badge.className = 'status-badge';
+        if (status === 'supabase') {
+            badge.classList.add('online');
+            text.textContent = 'Supabase Online';
+        } else {
+            badge.classList.add('local');
+            text.textContent = error ? 'Erro de Conexão' : 'Modo Local';
+        }
     }
 
     // Mostra feedback de teste de banco no modal
     showDbTestResult(success, message) {
+        if (!this.dbTestResult) return;
         this.dbTestResult.classList.remove('hidden');
         if (success) {
             this.dbTestResult.className = 'test-result-box success';
-            this.dbTestResult.innerHTML = `<i class="fa-solid fa-circle-check"></i> Conectado com sucesso!`;
+            this.dbTestResult.innerHTML = `<i class="fa-solid fa-circle-check"></i> Conectado ao Supabase com sucesso!`;
         } else {
             this.dbTestResult.className = 'test-result-box error';
             this.dbTestResult.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Erro: ${message}`;
@@ -836,24 +854,6 @@ export class View {
         } else {
             icon.className = 'fa-solid fa-moon';
             this.themeToggleBtn.title = 'Alternar para Modo Escuro';
-        }
-    }
-
-    // ==========================================================================
-    // CABEÇALHO DO BANCO DE DADOS
-    // ==========================================================================
-    updateDbStatus(status, errorMsg = '') {
-        this.dbStatusBadge.className = `status-badge ${status}`;
-        const statusText = this.dbStatusBadge.querySelector('.status-text');
-        
-        if (status === 'postgres') {
-            statusText.textContent = 'Vercel Postgres';
-            this.dbStatusBadge.title = 'Conectado ao Vercel Postgres em tempo real. Clique para alterar.';
-        } else {
-            statusText.textContent = 'Modo Local';
-            this.dbStatusBadge.title = errorMsg 
-                ? `Erro de conexão: ${errorMsg}. Usando LocalStorage. Clique para configurar.`
-                : 'Salvando apenas localmente neste navegador. Clique para conectar ao Postgres.';
         }
     }
 }
