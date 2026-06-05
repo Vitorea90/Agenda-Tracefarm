@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agenda Semanal Compartilhada</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome para Ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- HEADER PRINCIPAL -->
+        <header class="app-header">
+            <div class="header-logo">
+                <div class="logo-icon"><i class="fa-solid fa-calendar-alt"></i></div>
+                <div class="logo-text">
+                    <h1>Agenda Semanal</h1>
+                    <span>Compartilhada</span>
+                </div>
+            </div>
+            
+            <div class="week-navigation">
+                <button id="prev-week-btn" class="btn-icon" title="Semana Anterior"><i class="fa-solid fa-chevron-left"></i></button>
+                <div class="week-display">
+                    <span id="current-week-label" class="week-title">1ª Semana de Junho</span>
+                    <span id="current-week-range" class="week-dates">(31/05 a 06/06)</span>
+                </div>
+                <button id="next-week-btn" class="btn-icon" title="Próxima Semana"><i class="fa-solid fa-chevron-right"></i></button>
+                <button id="today-btn" class="btn-secondary btn-sm">Hoje</button>
+            </div>
+            
+            <div class="header-actions">
+                <div id="db-status-badge" class="status-badge local" title="Clique para configurar o banco de dados">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Modo Local</span>
+                </div>
+                
+                <button id="config-db-btn" class="btn-icon-text btn-secondary" title="Configurações de Banco de Dados">
+                    <i class="fa-solid fa-database"></i>
+                    <span>Banco de Dados</span>
+                </button>
+                
+                <button id="theme-toggle-btn" class="btn-icon" title="Alternar Modo Claro/Escuro">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- LAYOUT PRINCIPAL -->
+        <div class="main-layout">
+            
+            <!-- SIDEBAR ESQUERDA: PARTICIPANTES / PERFIS -->
+            <aside class="sidebar sidebar-left">
+                <div class="sidebar-section-header">
+                    <h2><i class="fa-solid fa-users"></i> Perfis e Participantes</h2>
+                    <button id="add-profile-btn" class="btn-primary btn-sm" title="Adicionar Perfil">
+                        <i class="fa-solid fa-plus"></i> Novo
+                    </button>
+                </div>
+                
+                <div class="selected-profile-box" id="active-profile-banner">
+                    <span class="profile-box-label">Editando Disponibilidade de:</span>
+                    <div class="active-profile-info">
+                        <div class="profile-none-selected">Nenhum perfil selecionado</div>
+                    </div>
+                    <p class="edit-instructions">Selecione um perfil e arraste no grid para pintar seus horários.</p>
+                </div>
+                
+                <div class="profiles-list-wrapper">
+                    <ul class="profiles-list" id="profiles-list">
+                        <!-- Renderizado via JavaScript -->
+                    </ul>
+                </div>
+                
+                <div class="sidebar-help-footer">
+                    <h4>Como usar?</h4>
+                    <ol>
+                        <li>Crie ou selecione um perfil na lista acima.</li>
+                        <li>Clique e arraste sobre as células da agenda para marcar seus horários livres.</li>
+                        <li>Selecione outro perfil para adicionar os horários dele.</li>
+                        <li>A agenda mostrará a compatibilidade combinada automaticamente!</li>
+                    </ol>
+                </div>
+            </aside>
+
+            <!-- CONTEÚDO PRINCIPAL: CALENDÁRIO / GRID -->
+            <main class="calendar-container">
+                <div class="calendar-grid-wrapper">
+                    <div class="calendar-grid-header" id="calendar-header-days">
+                        <div class="time-header-cell">Horário</div>
+                        <!-- Dias renderizados via JS -->
+                        <div class="day-header-cell" data-day="0">Dom <span class="header-day-num">31/05</span></div>
+                        <div class="day-header-cell" data-day="1">Seg <span class="header-day-num">01/06</span></div>
+                        <div class="day-header-cell" data-day="2">Ter <span class="header-day-num">02/06</span></div>
+                        <div class="day-header-cell" data-day="3">Qua <span class="header-day-num">03/06</span></div>
+                        <div class="day-header-cell" data-day="4">Qui <span class="header-day-num">04/06</span></div>
+                        <div class="day-header-cell" data-day="5">Sex <span class="header-day-num">05/06</span></div>
+                        <div class="day-header-cell" data-day="6">Sáb <span class="header-day-num">06/06</span></div>
+                    </div>
+                    
+                    <div class="calendar-grid-scroll" id="calendar-grid-scroll">
+                        <div class="calendar-grid-body" id="calendar-grid-body">
+                            <!-- Inserido dinamicamente via JS (48 slots de 30m por dia) -->
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- SIDEBAR DIREITA: COMPATIBILIDADE / ESTATÍSTICAS -->
+            <aside class="sidebar sidebar-right">
+                
+                <!-- COMPATIBILIDADE AUTOMÁTICA -->
+                <section class="sidebar-section">
+                    <div class="section-title">
+                        <h2><i class="fa-solid fa-handshake"></i> Horários Compatíveis</h2>
+                    </div>
+                    <div class="compatibility-filters">
+                        <button class="filter-chip active" data-filter="all">Todos</button>
+                        <button class="filter-chip" data-filter="100"><span class="badge badge-green">100%</span></button>
+                        <button class="filter-chip" data-filter="80"><span class="badge badge-blue">&ge; 80%</span></button>
+                    </div>
+                    <div class="compatibility-list-container" id="compatibility-list">
+                        <!-- Renderizado via JavaScript -->
+                        <div class="empty-state">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <p>Adicione participantes e marque disponibilidades para ver horários compatíveis.</p>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- RESUMO DOS PARTICIPANTES -->
+                <section class="sidebar-section">
+                    <div class="section-title">
+                        <h2><i class="fa-solid fa-list-check"></i> Resumo da Semana</h2>
+                    </div>
+                    <div class="summary-table-wrapper">
+                        <table class="summary-table">
+                            <thead>
+                                <tr>
+                                    <th>Participante</th>
+                                    <th>Horas</th>
+                                    <th>Disp. (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="summary-table-body">
+                                <!-- Renderizado via JS -->
+                            </tbody>
+                        </table>
+                        <div id="summary-total" class="summary-total-footer">
+                            Total de horas: <strong>0h</strong> | Média: <strong>0%</strong>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- ESTATÍSTICAS -->
+                <section class="sidebar-section">
+                    <div class="section-title">
+                        <h2><i class="fa-solid fa-chart-simple"></i> Painel de Estatísticas</h2>
+                    </div>
+                    <div class="stats-panel">
+                        <div class="stats-grid">
+                            <div class="stats-card">
+                                <span class="stats-num" id="stat-total-profiles">0</span>
+                                <span class="stats-label">Participantes</span>
+                            </div>
+                            <div class="stats-card">
+                                <span class="stats-num" id="stat-total-hours">0h</span>
+                                <span class="stats-label">Horas Totais</span>
+                            </div>
+                            <div class="stats-card">
+                                <span class="stats-num-small" id="stat-popular-slot">-</span>
+                                <span class="stats-label">Pico de Horário</span>
+                            </div>
+                            <div class="stats-card">
+                                <span class="stats-num-small" id="stat-popular-day">-</span>
+                                <span class="stats-label">Dia mais Ativo</span>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <h3>Disponibilidade por Dia da Semana</h3>
+                            <div class="chart-svg-wrapper" id="svg-chart-container">
+                                <!-- Renderizado SVG dinamicamente via JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+            </aside>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIGURAÇÃO DE BANCO DE DADOS (VERCEL POSTGRES) -->
+    <div class="modal-overlay" id="db-config-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2><i class="fa-solid fa-database"></i> Configurar Vercel Postgres</h2>
+                <button class="modal-close-btn" id="db-modal-close"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p>Esta aplicação suporta sincronização automática em tempo real salvando os dados no banco <strong>Vercel Postgres</strong> (através da API HTTP Neon).</p>
+                
+                <div class="alert-info-box">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <p>Sua string de conexão é salva <strong>apenas localmente</strong> no seu navegador (LocalStorage) e usada para fazer requisições diretas de SQL para a Neon. Ela nunca passa por servidores intermediários.</p>
+                </div>
+                
+                <form id="db-config-form">
+                    <div class="form-group">
+                        <label for="db-connection-string">String de Conexão (Connection String):</label>
+                        <input type="password" id="db-connection-string" placeholder="postgres://default:xxx@xxx-pooler.us-east-1.postgres.vercel-storage.com/neondb" autocomplete="off">
+                        <button type="button" id="toggle-conn-visibility" class="btn-inline-icon" title="Mostrar/Ocultar"><i class="fa-solid fa-eye"></i></button>
+                        <small class="form-help">Copie a String de Conexão da aba "Storage" ou "Settings" do seu projeto Vercel Postgres.</small>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" id="db-disconnect-btn" class="btn-danger">Limpar Conexão</button>
+                        <div class="right-actions">
+                            <button type="button" id="db-test-btn" class="btn-secondary">Testar Conexão</button>
+                            <button type="submit" class="btn-primary">Salvar e Conectar</button>
+                        </div>
+                    </div>
+                </form>
+                <div id="db-test-result" class="test-result-box hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE PERFIL (CRIAR E EDITAR) -->
+    <div class="modal-overlay" id="profile-modal">
+        <div class="modal-card modal-card-sm">
+            <div class="modal-header">
+                <h2 id="profile-modal-title"><i class="fa-solid fa-user-plus"></i> Novo Perfil</h2>
+                <button class="modal-close-btn" id="profile-modal-close"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="profile-form">
+                    <input type="hidden" id="profile-id">
+                    
+                    <div class="form-group">
+                        <label for="profile-name">Nome do Participante:</label>
+                        <input type="text" id="profile-name" required placeholder="Ex: João Silva" maxlength="20">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Escolha uma Cor:</label>
+                        <div class="color-palette" id="color-palette">
+                            <!-- Cores renderizadas via JS -->
+                        </div>
+                        <input type="hidden" id="profile-color" value="#6366f1">
+                    </div>
+                    
+                    <div class="avatar-preview-box">
+                        <span>Pré-visualização do Avatar:</span>
+                        <div class="avatar-preview" id="avatar-preview" style="background-color: #6366f1;">J</div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" id="profile-delete-btn" class="btn-danger hidden">Excluir Perfil</button>
+                        <button type="submit" class="btn-primary" id="profile-submit-btn">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- POPOVER FLUTUANTE PARA DETALHES DE DISPONIBILIDADE -->
+    <div class="cell-popover" id="cell-popover">
+        <div class="popover-time" id="popover-time">08:00 - 08:30</div>
+        <ul class="popover-list" id="popover-list">
+            <!-- Nomes e cores de quem está disponível -->
+        </ul>
+    </div>
+</body>
+</html>
